@@ -1,20 +1,36 @@
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const userRoutes = require('./Routes/userRoutes'); // Assure-toi que le chemin est correct
-const covoiturageRoutes = require('./Routes/covoiturageRoutes'); 
+const socketIo = require('socket.io');
+const userRoutes = require('./Routes/userRoutes');
+const covoiturageRoutes = require('./Routes/covoiturageRoutes');
+const morgan = require('morgan'); // Importer morgan
+const winston = require('winston'); // Importer winston
 
 // Charger les variables d'environnement
-dotenv.config(); 
+dotenv.config();
 
 // Créer une instance de l'application Express
 const app = express();
 app.use(express.json()); // Pour parser le JSON
 
-// Vérifier que l'URI MongoDB est chargé
-console.log('MongoDB URI:', process.env.MONGODB_URI);
+// Configurer morgan pour le logging des requêtes HTTP
+app.use(morgan('combined')); // 'combined' pour des logs plus détaillés
 
-// Connexion à MongoDB sans les options dépréciées
+// Créer le serveur HTTP
+const server = http.createServer(app);
+
+// Initialiser Socket.IO
+const io = socketIo(server);
+
+// Middleware pour rendre io accessible dans les routes
+app.use((req, res, next) => {
+  req.io = io; // Ajouter l'objet io à la requête
+  next();
+});
+
+// Connexion à MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('MongoDB connected');
@@ -24,11 +40,20 @@ mongoose.connect(process.env.MONGODB_URI)
   });
 
 // Utiliser les routes
-app.use('/api/users', userRoutes); // Assure-toi que c'est bien le routeur qui est utilisé
-app.use('/api/covoiturage', covoiturageRoutes); // Assure-toi que c'est bien le routeur qui est utilisé
+app.use('/api/users', userRoutes);
+app.use('/api/covoiturage', covoiturageRoutes);
 
 // Démarrer le serveur
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Serveur en cours d'exécution sur le port ${PORT}`);
+});
+
+// Gestion des connexions WebSocket
+io.on('connection', (socket) => {
+  console.log('Nouvelle connexion Socket.IO:', socket.id);
+
+  socket.on('disconnect', () => {
+    console.log('Socket.IO déconnecté:', socket.id);
+  });
 });
